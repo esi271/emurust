@@ -54,13 +54,13 @@ impl CPU {
             0x84 => self.adda_r8(self.registers.h),
             0x85 => self.adda_r8(self.registers.l),
             0x87 => self.adda_r8(self.registers.a),
-            0x90 => self.adda_r8(self.registers.b),
-            0x91 => self.adda_r8(self.registers.c),
-            0x92 => self.adda_r8(self.registers.d),
-            0x93 => self.adda_r8(self.registers.e),
-            0x94 => self.adda_r8(self.registers.h),
-            0x95 => self.adda_r8(self.registers.l),
-            0x97 => self.adda_r8(self.registers.a),
+            0x90 => self.suba_r8(self.registers.b),
+            0x91 => self.suba_r8(self.registers.c),
+            0x92 => self.suba_r8(self.registers.d),
+            0x93 => self.suba_r8(self.registers.e),
+            0x94 => self.suba_r8(self.registers.h),
+            0x95 => self.suba_r8(self.registers.l),
+            0x97 => self.suba_r8(self.registers.a),
             _ => println!("ciao"),
         }
     }
@@ -84,8 +84,9 @@ impl CPU {
         self.flags.carry_flag = of;
         self.flags.sub_flag = true;
         self.flags.zero_flag = res == 0;
-        self.flags.hc_flag = ((a&0xf) - (val&0xf))&0x10 == 0x10;
+        self.flags.hc_flag = (a&0xf) < (val&0xf);
 
+        self.registers.set_a(res);
     }
 
 
@@ -99,9 +100,10 @@ mod tests {
     #[test]
     fn ex_test() {
         let mut cpu = CPU::init();
-        cpu.registers.b = 5;
+        cpu.registers.a = 50;
+        cpu.registers.b = 230;
         cpu.execute(0x80);
-        assert_eq!(cpu.registers.a, 5)
+        assert_eq!(cpu.registers.a, 24)
     }
 
     #[test]
@@ -109,7 +111,8 @@ mod tests {
         let mut cpu = CPU::init();
         cpu.registers.a = 16;
         cpu.registers.b = 8;
-        cpu.execute(0x80);
+        cpu.execute(0x90);
+        assert_eq!(cpu.registers.a, 8);
         assert_eq!(cpu.flags.hc_flag, true)
     }
 
