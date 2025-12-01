@@ -156,7 +156,7 @@ impl CPU {
             // cp immediate
             0xFE => self.compare(val),
             // prefix
-            0xCB => self.execute_cb(code, val),
+            0xCB => self.execute_cb(val, val),
             _ => println!("ciao"),
         }
     }
@@ -180,7 +180,7 @@ impl CPU {
             0x1C => self.registers.h = self.rr(self.registers.h),
             0x1D => self.registers.l = self.rr(self.registers.l),
             0x1F => self.registers.a = self.rr(self.registers.a),
-            // left with carry
+            // left circular
             0x00 => self.registers.b = self.rlc(self.registers.b),
             0x01 => self.registers.c = self.rlc(self.registers.c),
             0x02 => self.registers.d = self.rlc(self.registers.d),
@@ -188,7 +188,7 @@ impl CPU {
             0x04 => self.registers.h = self.rlc(self.registers.h),
             0x05 => self.registers.l = self.rlc(self.registers.l),
             0x07 => self.registers.a = self.rlc(self.registers.a),
-            // right with carry
+            // right circular
             0x08 => self.registers.b = self.rrc(self.registers.b),
             0x09 => self.registers.c = self.rrc(self.registers.c),
             0x0A => self.registers.d = self.rrc(self.registers.d),
@@ -196,33 +196,74 @@ impl CPU {
             0x0C => self.registers.h = self.rrc(self.registers.h),
             0x0D => self.registers.l = self.rrc(self.registers.l),
             0x0F => self.registers.a = self.rrc(self.registers.a),
+            // shift
+            // left
+            0x20 => self.registers.b = self.shift_left(self.registers.b),
+            0x21 => self.registers.c = self.shift_left(self.registers.c),
+            0x22 => self.registers.d = self.shift_left(self.registers.d),
+            0x23 => self.registers.e = self.shift_left(self.registers.e),
+            0x24 => self.registers.h = self.shift_left(self.registers.h),
+            0x25 => self.registers.l = self.shift_left(self.registers.l),
+            0x27 => self.registers.a = self.shift_left(self.registers.a),
+            // right
+            0x28 => self.registers.b = self.shift_right(self.registers.b),
+            0x29 => self.registers.c = self.shift_right(self.registers.c),
+            0x2A => self.registers.d = self.shift_right(self.registers.d),
+            0x2B => self.registers.e = self.shift_right(self.registers.e),
+            0x2C => self.registers.h = self.shift_right(self.registers.h),
+            0x2D => self.registers.l = self.shift_right(self.registers.l),
+            0x2F => self.registers.a = self.shift_right(self.registers.a),
+            // right logical
+            0x38 => self.registers.b = self.srl(self.registers.b),
+            0x39 => self.registers.c = self.srl(self.registers.c),
+            0x3A => self.registers.d = self.srl(self.registers.d),
+            0x3B => self.registers.e = self.srl(self.registers.e),
+            0x3C => self.registers.h = self.srl(self.registers.h),
+            0x3D => self.registers.l = self.srl(self.registers.l),
+            0x3F => self.registers.a = self.srl(self.registers.a),
             _ => println!("ciao"),
         }
     }
 
+    fn srl(&mut self, val: u8) -> u8 {
+        self.shift_op(false, val, 0)
+    }
+
+    fn shift_right(&mut self, val: u8) -> u8 {
+        self.shift_op(false, val, val & 0x80)
+    }
+
+    fn shift_left(&mut self, val: u8) -> u8 {
+        self.shift_op(true, val, 0xFF)
+    }
+
     fn rrc(&mut self, val: u8) -> u8 {
-        let f = |x: u8, y: u8| ((x >> y) | (x & 0x01) << 7, bool::from(x & 0x01 == 0x01));
-        let res = self.reg_operation(f, val, 1, OpType::SHIFT);
-        res
+        self.shift_op(false, val, (val & 0x01) << 7)
     }
 
     fn rlc(&mut self, val: u8) -> u8 {
-        let f = |x: u8, y: u8| ((x << y) | ((x & 0x80) >> 7), bool::from(x & 0x80 == 0x80));
-        let res = self.reg_operation(f, val, 1, OpType::SHIFT);
-        res
+        self.shift_op(true, val, (val & 0x80) >> 7)
     }
 
     fn rr(&mut self, val: u8) -> u8 {
         let cb = u8::from(self.flags.carry_flag) << 7;
-        let f = |x: u8, y: u8| ((x >> y) | cb, bool::from(x & 0x01 == 0x01));
-        let res = self.reg_operation(f, val, 1, OpType::SHIFT);
-        res
+        self.shift_op(false, val, cb)
     }
 
     fn rl(&mut self, val: u8) -> u8 {
         let cb = u8::from(self.flags.carry_flag);
-        let f = |x: u8, y: u8| ((x << y) | cb, bool::from(x & 0x80 == 0x80));
-        let res = self.reg_operation(f, val, 1, OpType::SHIFT);
+        self.shift_op(true, val, cb)
+    }
+
+    fn shift_op(&mut self, is_left: bool, val: u8, or_op: u8) -> u8 {
+        let res: u8;
+        if is_left {
+            let f = |x: u8, y: u8| ((x << y) | (or_op), bool::from(x & 0x80 == 0x80));
+            res = self.reg_operation(f, val, 1, OpType::SHIFT);
+        } else {
+            let f = |x: u8, y: u8| ((x >> y) | (or_op), bool::from(x & 0x01 == 0x01));
+            res = self.reg_operation(f, val, 1, OpType::SHIFT);
+        }
         res
     }
 
@@ -381,5 +422,34 @@ mod tests {
         assert_eq!(cpu.registers.a, 0xF)
     }
 
+    #[test]
+    fn shift_test() {
+        let mut cpu = CPU::init();
+        cpu.registers.b = 0b10010000;
+        cpu.flags.carry_flag = true;
+        cpu.execute(0xcb, 0x10);
+        assert_eq!(cpu.registers.b, 0b00100001);
+        assert_eq!(cpu.flags.carry_flag, true);
+    }
+
+    #[test]
+    fn right_shift_test() {
+        let mut cpu = CPU::init();
+        cpu.registers.b = 0b10010000;
+        cpu.flags.carry_flag = true;
+        cpu.execute(0xcb, 0x28);
+        assert_eq!(cpu.registers.b, 0b11001000);
+        assert_eq!(cpu.flags.carry_flag, false);
+    }
+
+    #[test]
+    fn srl_test() {
+        let mut cpu = CPU::init();
+        cpu.registers.b = 0b10010000;
+        cpu.flags.carry_flag = true;
+        cpu.execute(0xcb, 0x38);
+        assert_eq!(cpu.registers.b, 0b01001000);
+        assert_eq!(cpu.flags.carry_flag, false);
+    }
 
 }
